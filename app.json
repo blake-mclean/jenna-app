@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "JENNA_App",
-    "slug": "JENNA_App",
+    "name": "JENNA",
+    "slug": "jenna",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
