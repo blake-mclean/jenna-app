@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Audio } from 'expo-av';
+import * as Notifications from 'expo-notifications';
 import { useApp } from '@/context/AppContext';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 import { LevelUpModal } from '@/components/LevelUpModal';
@@ -17,13 +18,14 @@ import { ChallengeCompleteModal } from '@/components/ChallengeCompleteModal';
 import { RideDetailModal } from '@/components/RideDetailModal';
 import { CHALLENGE_DEFS } from '@/constants/challenges';
 import { LEVEL_BADGE_DEFS } from '@/constants/levelBadges';
+import { LEVEL_THRESHOLDS } from '@/utils/levels';
 import { COLORS, SPACING, FONT, RADIUS } from '@/constants/theme';
 import { Ride } from '@/types';
 
 // ─── Visual preview state ─────────────────────────────────────────────────────
 
 export default function DevToolsScreen() {
-  const { data, addRideOnDate, resetData, markOnboardingSeen } = useApp();
+  const { data, sportData, addRideOnDate, resetData, markOnboardingSeen } = useApp();
 
   const [showConfetti, setShowConfetti]             = useState(false);
   const [levelUpPreview, setLevelUpPreview]         = useState<number | null>(null);
@@ -112,6 +114,15 @@ export default function DevToolsScreen() {
     );
   }
 
+  // Block this screen entirely in production builds
+  if (!__DEV__) {
+    return (
+      <SafeAreaView style={[styles.safe, { alignItems: 'center', justifyContent: 'center' }]}>
+        <Text style={{ color: COLORS.textTertiary, fontSize: FONT.size.sm }}>Not available</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       {/* Header */}
@@ -154,7 +165,7 @@ export default function DevToolsScreen() {
             ))}
           </View>
           {badge ? (
-            <Text style={styles.badgePreview}>Badge: {badge.icon} {badge.name}</Text>
+            <Text style={styles.badgePreview}>Badge: {badge.name}</Text>
           ) : (
             <Text style={styles.badgePreview}>No badge at this level</Text>
           )}
@@ -198,6 +209,57 @@ export default function DevToolsScreen() {
               })
             }
           />
+        </DevCard>
+
+        {/* ── Push Notifications ──────────────────────────────────── */}
+        <Text style={styles.section}>Push Notifications</Text>
+
+        <DevCard>
+          <DevLabel icon="🔔" label="Daily Reminder" />
+          <Text style={styles.hint}>Fires an immediate test notification (same as the scheduled daily one)</Text>
+          <DevButton
+            label="Send Now"
+            onPress={async () => {
+              const PROMPTS = [
+                { title: 'Time to ride! 🚴', body: 'Have you logged your spin session today?' },
+                { title: 'Spin check-in 🔥', body: 'How was your ride today? Tap to log it.' },
+                { title: 'Keep the momentum going!', body: "Log today's ride and keep your streak alive." },
+                { title: 'Your bike is calling 📣', body: "Don't forget to log your workout!" },
+              ];
+              const pick = PROMPTS[Math.floor(Math.random() * PROMPTS.length)];
+              await Notifications.scheduleNotificationAsync({
+                content: { title: pick.title, body: pick.body, sound: true },
+                trigger: null,
+              });
+              Alert.alert('Sent', 'Daily reminder notification delivered.');
+            }}
+          />
+        </DevCard>
+
+        <DevCard>
+          <DevLabel icon="🔥" label="Streak Celebration" />
+          <Text style={styles.hint}>Fires a streak milestone notification for a chosen streak length</Text>
+          <View style={styles.row}>
+            {[3, 7, 14, 30].map((n) => (
+              <TouchableOpacity
+                key={n}
+                style={styles.chip}
+                onPress={async () => {
+                  await Notifications.scheduleNotificationAsync({
+                    content: {
+                      title: `🔥 ${n}-day streak!`,
+                      body: `You're on fire! ${n} days in a row — keep it going!`,
+                      sound: true,
+                    },
+                    trigger: null,
+                  });
+                  Alert.alert('Sent', `${n}-day streak notification delivered.`);
+                }}
+              >
+                <Text style={styles.chipText}>{n}d</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </DevCard>
 
         {/* ── Data Tools ──────────────────────────────────────────── */}
@@ -249,10 +311,10 @@ export default function DevToolsScreen() {
         <Text style={styles.section}>Current State</Text>
         <View style={styles.snapshotCard}>
           {[
-            ['Rides', String(data.rides.length)],
-            ['Unlocked badges', String(data.unlockedBadges.length)],
-            ['Challenges enrolled', String(data.challenges.filter((c) => c.enrolled).length)],
-            ['Achievements earned', String(data.achievements.filter((a) => a.earned).length)],
+            ['Rides', String(sportData.rides.length)],
+            ['Unlocked badges', String(sportData.unlockedBadges.length)],
+            ['Challenges enrolled', String(sportData.challenges.filter((c) => c.enrolled).length)],
+            ['Achievements earned', String(sportData.achievements.filter((a) => a.earned).length)],
             ['Onboarding seen', String(data.hasSeenOnboarding)],
           ].map(([label, value]) => (
             <View key={label} style={styles.snapshotRow}>
@@ -270,6 +332,7 @@ export default function DevToolsScreen() {
       <LevelUpModal
         visible={levelUpPreview !== null}
         level={levelUpPreview ?? 1}
+        milesTo={levelUpPreview ? Math.round(LEVEL_THRESHOLDS[levelUpPreview] * 10) / 10 - 1 : undefined}
         badge={badge}
         onDismiss={() => setLevelUpPreview(null)}
       />

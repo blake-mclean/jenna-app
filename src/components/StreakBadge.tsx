@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, RADIUS, SPACING, FONT } from '../constants/theme';
-
 interface Props {
   streak: number;
   size?: 'sm' | 'lg';

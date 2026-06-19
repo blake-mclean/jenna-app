@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, RADIUS, SPACING, FONT, SHADOW } from '../constants/theme';
+import { Icon, IconName } from './Icon';
 
 interface Props {
   label: string;
@@ -9,10 +10,11 @@ interface Props {
   sub?: string;
   accent?: string;
   icon?: string;
+  iconName?: IconName;
   style?: ViewStyle;
 }
 
-export function StatCard({ label, value, sub, accent = COLORS.primary, icon, style }: Props) {
+export function StatCard({ label, value, sub, accent = COLORS.primary, icon, iconName, style }: Props) {
   return (
     <View style={[styles.wrapper, style]}>
       <LinearGradient
@@ -22,7 +24,8 @@ export function StatCard({ label, value, sub, accent = COLORS.primary, icon, sty
         end={{ x: 1, y: 1 }}
       >
         <View style={[styles.accentBar, { backgroundColor: accent }]} />
-        {icon && <Text style={styles.icon}>{icon}</Text>}
+        {iconName && <View style={styles.iconWrap}><Icon name={iconName} size={20} color={accent} /></View>}
+        {!iconName && icon && <Text style={styles.icon}>{icon}</Text>}
         <Text style={[styles.value, { color: accent }]}>{value}</Text>
         <Text style={styles.label}>{label}</Text>
         {sub && <Text style={styles.sub}>{sub}</Text>}
@@ -50,6 +53,9 @@ const styles = StyleSheet.create({
     height: 2,
     borderTopLeftRadius: RADIUS.md,
     borderTopRightRadius: RADIUS.md,
+  },
+  iconWrap: {
+    marginBottom: SPACING.xs,
   },
   icon: {
     fontSize: 20,

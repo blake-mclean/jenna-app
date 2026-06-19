@@ -1,0 +1,88 @@
+import { AchievementDef } from '../types';
+
+export const RUNNING_ACHIEVEMENT_DEFS: AchievementDef[] = [
+  {
+    id: 'first-run',
+    name: 'First Stride',
+    description: 'Log your very first run',
+    icon: 'runner',
+    check: (rides) => rides.length >= 1,
+  },
+  {
+    id: 'ten-runs',
+    name: 'Road Warrior',
+    description: 'Log 10 runs',
+    icon: 'muscle',
+    check: (rides) => rides.length >= 10,
+  },
+  {
+    id: 'fifty-runs',
+    name: 'Century Runner',
+    description: 'Log 50 runs',
+    icon: 'trophy',
+    check: (rides) => rides.length >= 50,
+  },
+  {
+    id: 'streak-3',
+    name: 'Hat Trick',
+    description: 'Run 3 days in a row',
+    icon: 'flame',
+    check: (_rides, streak) => streak >= 3,
+  },
+  {
+    id: 'streak-7',
+    name: 'Week Warrior',
+    description: 'Run 7 days in a row',
+    icon: 'lightning',
+    check: (_rides, streak) => streak >= 7,
+  },
+  {
+    id: 'streak-30',
+    name: 'Iron Legs',
+    description: 'Run 30 days in a row',
+    icon: 'shield',
+    check: (_rides, streak) => streak >= 30,
+  },
+  {
+    id: 'total-100min',
+    name: 'Century of Minutes',
+    description: 'Accumulate 100 total minutes of running',
+    icon: 'clock',
+    check: (rides) => rides.reduce((s, r) => s + r.duration, 0) >= 100,
+  },
+  {
+    id: 'total-1000min',
+    name: 'Time Machine',
+    description: 'Accumulate 1,000 total minutes of running',
+    icon: 'clock',
+    check: (rides) => rides.reduce((s, r) => s + r.duration, 0) >= 1000,
+  },
+  {
+    id: 'distance-100km',
+    name: '100km Club',
+    description: 'Run 100 km total',
+    icon: 'route',
+    check: (rides) => rides.reduce((s, r) => s + (r.distance ?? 0), 0) >= 100,
+  },
+  {
+    id: 'calorie-1000',
+    name: 'Burn Notice',
+    description: 'Burn 1,000 calories running total',
+    icon: 'flame',
+    check: (rides) => rides.reduce((s, r) => s + (r.calories ?? 0), 0) >= 1000,
+  },
+  {
+    id: 'early-bird',
+    name: 'Early Bird',
+    description: 'Log a run before 7 AM',
+    icon: 'sunrise',
+    check: (rides) => rides.some((r) => new Date(r.date).getHours() < 7),
+  },
+  {
+    id: 'night-owl',
+    name: 'Night Owl',
+    description: 'Log a run after 9 PM',
+    icon: 'moon',
+    check: (rides) => rides.some((r) => new Date(r.date).getHours() >= 21),
+  },
+];

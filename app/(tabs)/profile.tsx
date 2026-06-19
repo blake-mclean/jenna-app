@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   TextInput,
   Dimensions,
+  Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,8 +16,10 @@ import { useApp } from '@/context/AppContext';
 import { calcCurrentStreak, calcLongestStreak } from '@/utils/streaks';
 import { formatDuration } from '@/utils/format';
 import { ACHIEVEMENT_DEFS } from '@/constants/achievements';
+import { RUNNING_ACHIEVEMENT_DEFS } from '@/constants/runningAchievements';
 import { LEVEL_BADGE_DEFS } from '@/constants/levelBadges';
 import { COLORS, SPACING, FONT, RADIUS, SHADOW } from '@/constants/theme';
+import { Icon, IconName } from '@/components/Icon';
 
 // margin (md each side) + padding (md each side) + 3 gaps between 4 columns
 const BADGE_CARD_W = Math.floor(
@@ -24,12 +27,26 @@ const BADGE_CARD_W = Math.floor(
 );
 
 export default function ProfileScreen() {
-  const { data, updateProfile, equipBadge, signOut, session } = useApp();
-  const { rides, profile, achievements } = data;
+  const { data, sportData, updateProfile, equipBadge } = useApp();
+  const { profile } = data;
+  const { rides, achievements, unlockedBadges } = sportData;
+  const activeSport = profile.activeSport ?? 'cycling';
   const equippedBadge = LEVEL_BADGE_DEFS.find((b) => b.id === profile.equippedBadgeId);
   const [editing, setEditing] = useState(false);
   const [nameInput, setNameInput] = useState(profile.name);
   const [goalInput, setGoalInput] = useState(String(profile.weeklyRideGoal));
+  const [editingGoal, setEditingGoal] = useState(false);
+
+  const isKm = profile.distanceUnit === 'km';
+  const indoorSpeedKmh = profile.indoorCyclingSpeed ?? 20;
+  const indoorSpeedDisplay = isKm ? indoorSpeedKmh : Math.round(indoorSpeedKmh * 0.621371);
+  const speedUnit = isKm ? 'km/h' : 'mph';
+
+  function adjustIndoorSpeed(delta: number) {
+    const newDisplay = Math.max(8, Math.min(50, indoorSpeedDisplay + delta));
+    const newKmh = isKm ? newDisplay : Math.round(newDisplay / 0.621371);
+    updateProfile({ indoorCyclingSpeed: newKmh });
+  }
 
   const streak = calcCurrentStreak(rides);
   const longestStreak = calcLongestStreak(rides);
@@ -48,6 +65,11 @@ export default function ProfileScreen() {
     setEditing(false);
   }
 
+  function saveGoal() {
+    updateProfile({ weeklyRideGoal: parseInt(goalInput, 10) || profile.weeklyRideGoal });
+    setEditingGoal(false);
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView
@@ -63,9 +85,13 @@ export default function ProfileScreen() {
           end={{ x: 1, y: 1 }}
         >
           <View style={[styles.avatar, equippedBadge && styles.avatarWithBadge]}>
-            <Text style={equippedBadge ? styles.avatarEmoji : styles.avatarText}>
-              {equippedBadge ? equippedBadge.icon : profile.name.charAt(0).toUpperCase()}
-            </Text>
+            {equippedBadge ? (
+              <Image source={equippedBadge.image} style={styles.avatarBadgeImg} resizeMode="contain" />
+            ) : (
+              <Text style={styles.avatarText}>
+                {profile.name.charAt(0).toUpperCase()}
+              </Text>
+            )}
           </View>
           {equippedBadge && (
             <View style={styles.equippedLabel}>
@@ -81,6 +107,11 @@ export default function ProfileScreen() {
                 placeholder="Your name"
                 placeholderTextColor={COLORS.textTertiary}
                 autoFocus
+                autoCorrect={false}
+                maxLength={30}
+                returnKeyType="done"
+                onSubmitEditing={saveEdit}
+                onBlur={saveEdit}
               />
             </View>
           ) : (
@@ -99,15 +130,15 @@ export default function ProfileScreen() {
         {/* Stats grid */}
         <View style={styles.statsGrid}>
           {[
-            { label: 'Total Rides', value: String(rides.length), icon: '🚴', color: COLORS.primary },
-            { label: 'Total Time', value: formatDuration(totalMinutes), icon: '⏱️', color: COLORS.blue },
-            { label: 'Total Distance', value: `${totalKm.toFixed(0)} km`, icon: '🗺️', color: COLORS.streak },
-            { label: 'Best Streak', value: `${longestStreak}d`, icon: '🔥', color: COLORS.streak },
-            { label: 'Current Streak', value: `${streak}d`, icon: '⚡', color: COLORS.primary },
-            { label: 'Achievements', value: `${earnedAchievements.length}/${ACHIEVEMENT_DEFS.length}`, icon: '🏅', color: COLORS.achievement },
+            { label: activeSport === 'running' ? 'Total Runs' : 'Total Rides', value: String(rides.length), icon: activeSport === 'running' ? 'runner' : 'bicycle', color: COLORS.primary },
+            { label: 'Total Time', value: formatDuration(totalMinutes), icon: 'clock', color: COLORS.blue },
+            { label: 'Total Distance', value: profile.distanceUnit === 'miles' ? `${(totalKm * 0.621371).toFixed(0)} mi` : `${totalKm.toFixed(0)} km`, icon: 'route', color: COLORS.streak },
+            { label: 'Best Streak', value: `${longestStreak}d`, icon: 'flame', color: COLORS.streak },
+            { label: 'Current Streak', value: `${streak}d`, icon: 'lightning', color: COLORS.primary },
+            { label: 'Achievements', value: `${earnedAchievements.length}/${activeSport === 'running' ? RUNNING_ACHIEVEMENT_DEFS.length : ACHIEVEMENT_DEFS.length}`, icon: 'medal', color: COLORS.achievement },
           ].map((item) => (
             <View key={item.label} style={styles.statItem}>
-              <Text style={styles.statIcon}>{item.icon}</Text>
+              <Icon name={item.icon as IconName} size={20} color={item.color} />
               <Text style={[styles.statVal, { color: item.color }]}>{item.value}</Text>
               <Text style={styles.statLabel}>{item.label}</Text>
             </View>
@@ -118,13 +149,13 @@ export default function ProfileScreen() {
         <Text style={styles.sectionTitle}>Level Badges</Text>
         <View style={styles.badgePicker}>
           <Text style={styles.badgeHint}>
-            {data.unlockedBadges.length === 0
-              ? 'Log rides to level up and unlock badges'
-              : 'Tap a badge to equip it on your profile'}
+            {unlockedBadges.length === 0
+              ? `Log ${activeSport === 'running' ? 'runs' : 'rides'} to level up and unlock badges`
+              : `Tap a badge to equip it on your profile`}
           </Text>
           <View style={styles.badgeGrid}>
             {LEVEL_BADGE_DEFS.map((def) => {
-              const unlocked = data.unlockedBadges.includes(def.id);
+              const unlocked = unlockedBadges.includes(def.id);
               const equipped = profile.equippedBadgeId === def.id;
               return (
                 <TouchableOpacity
@@ -137,9 +168,13 @@ export default function ProfileScreen() {
                   onPress={() => unlocked && equipBadge(equipped ? undefined : def.id)}
                   activeOpacity={unlocked ? 0.7 : 1}
                 >
-                  <Text style={[styles.levelBadgeIcon, !unlocked && styles.levelBadgeIconLocked]}>
-                    {unlocked ? def.icon : '🔒'}
-                  </Text>
+                  {unlocked ? (
+                    <Image source={def.image} style={styles.levelBadgeImg} resizeMode="contain" />
+                  ) : (
+                    <View style={styles.levelBadgeLockWrap}>
+                      <Icon name="lock" size={18} color={COLORS.textTertiary} />
+                    </View>
+                  )}
                   <Text
                     style={[styles.levelBadgeName, !unlocked && styles.levelBadgeNameLocked]}
                     numberOfLines={1}
@@ -155,30 +190,66 @@ export default function ProfileScreen() {
         </View>
 
         {/* Weekly goal */}
-        <View style={styles.goalSection}>
-          <Text style={styles.sectionTitle}>Weekly Ride Goal</Text>
-          {editing ? (
-            <View style={styles.goalInput}>
+        <Text style={styles.sectionTitle}>{activeSport === 'running' ? 'Weekly Run Goal' : 'Weekly Ride Goal'}</Text>
+        <TouchableOpacity
+          style={styles.goalSection}
+          onPress={() => { setGoalInput(String(profile.weeklyRideGoal)); setEditingGoal(true); }}
+          activeOpacity={editingGoal ? 1 : 0.7}
+        >
+          {editingGoal ? (
+            <View style={styles.goalEditRow}>
               <TextInput
                 style={styles.goalTextInput}
                 value={goalInput}
                 onChangeText={setGoalInput}
                 keyboardType="number-pad"
                 maxLength={2}
+                autoFocus
               />
-              <Text style={styles.goalUnit}>rides / week</Text>
+              <Text style={styles.goalUnit}>{activeSport === 'running' ? 'runs' : 'rides'} / week</Text>
+              <TouchableOpacity style={styles.goalSaveBtn} onPress={saveGoal}>
+                <Text style={styles.goalSaveBtnText}>Done</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.goalDisplay}>
               <Text style={styles.goalVal}>{profile.weeklyRideGoal}</Text>
-              <Text style={styles.goalUnit}>rides per week</Text>
+              <Text style={styles.goalUnit}>{activeSport === 'running' ? 'runs' : 'rides'} per week</Text>
+              <Text style={styles.goalEditHint}>Tap to edit</Text>
             </View>
           )}
-        </View>
+        </TouchableOpacity>
+
+        {/* Indoor cycling speed — cycling only */}
+        {activeSport === 'cycling' && (
+          <>
+            <Text style={styles.sectionTitle}>Indoor Cycling Speed</Text>
+            <View style={styles.speedSection}>
+              <Text style={styles.speedHint}>Used to estimate distance for indoor rides</Text>
+              <View style={styles.stepper}>
+                <TouchableOpacity
+                  style={styles.stepBtn}
+                  onPress={() => adjustIndoorSpeed(-1)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.stepBtnText}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.stepValue}>{indoorSpeedDisplay} {speedUnit}</Text>
+                <TouchableOpacity
+                  style={styles.stepBtn}
+                  onPress={() => adjustIndoorSpeed(1)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.stepBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        )}
 
         {/* Distance unit */}
+        <Text style={styles.sectionTitle}>Distance Unit</Text>
         <View style={styles.unitSection}>
-          <Text style={styles.sectionTitle}>Distance Unit</Text>
           <View style={styles.unitRow}>
             {(['km', 'miles'] as const).map((u) => (
               <TouchableOpacity
@@ -196,50 +267,21 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Recent achievements */}
-        {earnedAchievements.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Recent Achievements</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.badgeScroll}>
-              {earnedAchievements.slice(0, 6).map((a) => {
-                const def = ACHIEVEMENT_DEFS.find((d) => d.id === a.id);
-                if (!def) return null;
-                return (
-                  <View key={a.id} style={styles.badgeChip}>
-                    <Text style={styles.badgeChipIcon}>{def.icon}</Text>
-                    <Text style={styles.badgeChipName}>{def.name}</Text>
-                  </View>
-                );
-              })}
-            </ScrollView>
-          </>
-        )}
-
         {/* Settings link */}
         <TouchableOpacity style={styles.settingsLink} onPress={() => router.push('/settings')}>
-          <Text style={styles.settingsLinkIcon}>⚙️</Text>
+          <Icon name="gear" size={20} color={COLORS.textSecondary} />
           <Text style={styles.settingsLinkText}>Settings & Notifications</Text>
           <Text style={styles.settingsArrow}>→</Text>
         </TouchableOpacity>
 
-        {/* Sign out */}
-        {session && (
-          <TouchableOpacity
-            style={[styles.settingsLink, styles.signOutLink]}
-            onPress={signOut}
-          >
-            <Text style={styles.settingsLinkIcon}>🚪</Text>
-            <Text style={[styles.settingsLinkText, styles.signOutText]}>Sign Out</Text>
+        {/* Dev Tools link — dev builds only */}
+        {__DEV__ && (
+          <TouchableOpacity style={[styles.settingsLink, styles.devLink]} onPress={() => router.push('/dev-tools')}>
+            <Icon name="wrench" size={20} color={COLORS.textSecondary} />
+            <Text style={[styles.settingsLinkText, styles.devLinkText]}>Developer Tools</Text>
             <Text style={styles.settingsArrow}>→</Text>
           </TouchableOpacity>
         )}
-
-        {/* Dev Tools link */}
-        <TouchableOpacity style={[styles.settingsLink, styles.devLink]} onPress={() => router.push('/dev-tools')}>
-          <Text style={styles.settingsLinkIcon}>🛠</Text>
-          <Text style={[styles.settingsLinkText, styles.devLinkText]}>Developer Tools</Text>
-          <Text style={styles.settingsArrow}>→</Text>
-        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -274,9 +316,13 @@ const styles = StyleSheet.create({
     fontSize: 38,
   },
   avatarWithBadge: {
-    backgroundColor: COLORS.primaryDim,
+    backgroundColor: '#06060F',
     borderWidth: 2,
     borderColor: COLORS.primary,
+  },
+  avatarBadgeImg: {
+    width: 72,
+    height: 72,
   },
   equippedLabel: {
     backgroundColor: COLORS.primaryDim,
@@ -364,14 +410,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  goalDisplay: { flexDirection: 'row', alignItems: 'baseline', gap: SPACING.xs, marginTop: SPACING.xs },
+  goalDisplay: { flexDirection: 'row', alignItems: 'baseline', gap: SPACING.xs },
   goalVal: { fontSize: FONT.size.xxl, fontWeight: FONT.weight.heavy, color: COLORS.primary },
   goalUnit: { fontSize: FONT.size.sm, color: COLORS.textSecondary },
-  goalInput: {
+  goalEditHint: {
+    flex: 1,
+    fontSize: FONT.size.xs,
+    color: COLORS.textTertiary,
+    textAlign: 'right',
+  },
+  goalEditRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
-    marginTop: SPACING.xs,
   },
   goalTextInput: {
     width: 60,
@@ -383,6 +434,20 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
     textAlign: 'center',
   },
+  goalSaveBtn: {
+    marginLeft: 'auto',
+    backgroundColor: COLORS.primaryDim,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '60',
+  },
+  goalSaveBtnText: {
+    fontSize: FONT.size.sm,
+    fontWeight: FONT.weight.semibold,
+    color: COLORS.primary,
+  },
 
   sectionTitle: {
     fontSize: FONT.size.md,
@@ -391,6 +456,53 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.md,
     marginBottom: SPACING.sm,
     marginTop: SPACING.xs,
+  },
+
+  speedSection: {
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  speedHint: {
+    fontSize: FONT.size.xs,
+    color: COLORS.textSecondary,
+    flex: 1,
+    marginRight: SPACING.md,
+  },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  stepBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.surfaceElevated,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepBtnText: {
+    fontSize: FONT.size.lg,
+    fontWeight: FONT.weight.bold,
+    color: COLORS.primary,
+    lineHeight: 22,
+  },
+  stepValue: {
+    fontSize: FONT.size.sm,
+    fontWeight: FONT.weight.bold,
+    color: COLORS.textPrimary,
+    minWidth: 64,
+    textAlign: 'center',
   },
 
   unitSection: {
@@ -402,7 +514,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  unitRow: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.xs },
+  unitRow: { flexDirection: 'row', gap: SPACING.sm },
   unitBtn: {
     flex: 1,
     paddingVertical: SPACING.sm,
@@ -446,9 +558,22 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     paddingVertical: SPACING.sm,
     paddingHorizontal: 4,
+    paddingTop: SPACING.xs,
     borderWidth: 1,
     borderColor: COLORS.border,
     position: 'relative',
+  },
+  levelBadgeImg: {
+    width: BADGE_CARD_W - 8,
+    height: BADGE_CARD_W - 8,
+    marginBottom: 3,
+  },
+  levelBadgeLockWrap: {
+    width: BADGE_CARD_W - 8,
+    height: BADGE_CARD_W - 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 3,
   },
   levelBadgeCardLocked: {
     opacity: 0.4,
@@ -521,12 +646,6 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   settingsArrow: { fontSize: FONT.size.md, color: COLORS.textSecondary },
-
-  signOutLink: {
-    borderColor: COLORS.record + '50',
-    marginTop: SPACING.xs,
-  },
-  signOutText: { color: COLORS.record },
 
   devLink: {
     borderColor: COLORS.textTertiary,

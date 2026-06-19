@@ -64,11 +64,13 @@ const AnimCircle = Animated.createAnimatedComponent(Circle);
 
 interface Props {
   totalMiles: number;
+  distanceUnit?: 'km' | 'miles';
   focused?: boolean;
+  animate?: boolean;
   onLevelUp?: (newLevel: number) => void;
 }
 
-export function CycleTrack({ totalMiles, focused = true, onLevelUp }: Props) {
+export function CycleTrack({ totalMiles, distanceUnit = 'miles', focused = true, animate = false, onLevelUp }: Props) {
   const { level: actualLevel, progress: actualProgress, milesLeft: actualMilesLeft } = getLevelInfo(totalMiles);
 
   const levelRef     = useRef(actualLevel);
@@ -110,15 +112,22 @@ export function CycleTrack({ totalMiles, focused = true, onLevelUp }: Props) {
   // Animate progress — only when the screen is visible (focused)
   useEffect(() => {
     const info = getLevelInfo(totalMiles);
-    const didLevelUp = info.level > levelRef.current;
 
     if (!focused) {
       animProg.stopAnimation();
-      // Leave animProg at the old level's position — it will be the starting
-      // point for the fill-to-completion animation when focus returns.
-      // Leave levelRef unchanged — we still need to detect the level-up.
       return;
     }
+
+    if (!animate) {
+      // Snap to the correct position without playing animation or firing onLevelUp.
+      // This prevents the track from replaying every time the app is opened.
+      levelRef.current = info.level;
+      setDisplayLevel(info.level);
+      animProg.setValue(info.progress);
+      return;
+    }
+
+    const didLevelUp = info.level > levelRef.current;
 
     if (didLevelUp) {
       const newLevel = info.level;
@@ -162,7 +171,7 @@ export function CycleTrack({ totalMiles, focused = true, onLevelUp }: Props) {
         useNativeDriver: false,
       }).start();
     }
-  }, [totalMiles, focused]);
+  }, [totalMiles, focused, animate]);
 
   // strokeDashoffset: TOTAL = empty track, 0 = full track
   const dashOffset = animProg.interpolate({
@@ -170,11 +179,15 @@ export function CycleTrack({ totalMiles, focused = true, onLevelUp }: Props) {
     outputRange: [TOTAL, 0],
   });
 
+  const distLeft = distanceUnit === 'km'
+    ? actualMilesLeft / 0.621371
+    : actualMilesLeft;
+  const distLabel = distanceUnit === 'km' ? 'km' : 'mi';
   const subtitle = isLevelingUp
-    ? '🚀 Leveling up!'
+    ? 'Leveling up!'
     : actualMilesLeft < 0.05
-      ? `Level ${displayLevel + 1} unlocked! 🎉`
-      : `${actualMilesLeft.toFixed(1)} mi to level ${displayLevel + 1}`;
+      ? `Level ${displayLevel + 1} unlocked!`
+      : `${distLeft.toFixed(1)} ${distLabel} to level ${displayLevel + 1}`;
 
   return (
     <View style={styles.container}>

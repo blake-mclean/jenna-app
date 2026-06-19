@@ -1,6 +1,8 @@
-import { Tabs } from 'expo-router';
+import { Tabs, router, useRootNavigationState } from 'expo-router';
+import { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
+import { useApp } from '@/context/AppContext';
 import { COLORS, FONT } from '@/constants/theme';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -85,9 +87,24 @@ function PersonIcon({ color }: { color: string }) {
   );
 }
 
+function GarageIcon({ color }: { color: string }) {
+  return (
+    <Svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none">
+      {/* Wrench body */}
+      <Path
+        d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
+        stroke={color}
+        strokeWidth={SW}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // ─── Tab item ─────────────────────────────────────────────────────────────────
 
-type TabName = 'home' | 'stats' | 'compete' | 'profile';
+type TabName = 'home' | 'stats' | 'compete' | 'profile' | 'garage';
 
 interface TabIconProps {
   name: TabName;
@@ -103,6 +120,7 @@ function TabIcon({ name, label, focused }: TabIconProps) {
       {name === 'stats'   && <StatsIcon   color={color} />}
       {name === 'compete' && <TrophyIcon  color={color} />}
       {name === 'profile' && <PersonIcon  color={color} />}
+      {name === 'garage'  && <GarageIcon  color={color} />}
       <Text
         style={[styles.label, focused ? styles.labelActive : styles.labelInactive]}
         numberOfLines={1}
@@ -118,6 +136,19 @@ function TabIcon({ name, label, focused }: TabIconProps) {
 // ─── Layout ───────────────────────────────────────────────────────────────────
 
 export default function TabsLayout() {
+  const { session, loaded, data } = useApp();
+  const navState = useRootNavigationState();
+
+  // Single auth guard for all tabs — covers direct deep-link navigation too.
+  useEffect(() => {
+    if (!navState?.key || !loaded) return;
+    if (!session) {
+      router.replace('/auth');
+    } else if (!data.hasSeenOnboarding) {
+      router.replace('/onboarding');
+    }
+  }, [navState?.key, loaded, session, data.hasSeenOnboarding]);
+
   return (
     <Tabs
       screenOptions={{
@@ -142,6 +173,12 @@ export default function TabsLayout() {
         name="challenges"
         options={{
           tabBarIcon: ({ focused }) => <TabIcon name="compete" label="Compete" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="garage"
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon name="garage" label="Garage" focused={focused} />,
         }}
       />
       <Tabs.Screen

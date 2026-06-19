@@ -9,6 +9,7 @@ import {
   Animated,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,7 +19,7 @@ import { COLORS, SPACING, FONT, RADIUS } from '@/constants/theme';
 const { width: SCREEN_W } = Dimensions.get('window');
 
 interface Slide {
-  icon: string;
+  image: any;
   accent: string;
   title: string;
   body: string;
@@ -27,31 +28,38 @@ interface Slide {
 
 const SLIDES: Slide[] = [
   {
-    icon: '🚴',
+    image: require('../assets/images/onboarding/slide1.png'),
     accent: COLORS.primary,
     title: 'Welcome to JENNA',
     body: 'Your personal indoor cycling companion. JENNA tracks every ride, celebrates your progress, and keeps you motivated to hit the saddle.',
   },
   {
-    icon: '📝',
+    image: require('../assets/images/onboarding/slide2.png'),
     accent: COLORS.blue,
     title: 'Log Your Rides',
     body: 'Tap "Log a Ride" from the home screen after each session. Fill in what you know — only duration is required.',
     bullets: ['Duration, distance, calories', 'Resistance level & heart rate', 'Instructor & personal notes'],
   },
   {
-    icon: '⬆️',
+    image: require('../assets/images/onboarding/slide3.png'),
     accent: '#FFD700',
     title: 'Level Up',
     body: 'Every mile you ride earns progress on the Cycle Level track. Level up to unlock exclusive profile badges.',
     bullets: ['Watch your dot lap the oval track', 'Earn badges from Sprout to Legend', 'Equip a badge to show it on your profile'],
   },
   {
-    icon: '🏆',
+    image: require('../assets/images/onboarding/slide4.png'),
     accent: COLORS.achievement,
     title: 'Challenges & Achievements',
     body: 'Join real-world cycling challenges and earn achievement badges for reaching personal milestones.',
     bullets: ['Ride the Tour de France distance (3,357 km)', 'Build long ride streaks', 'Earn 12 unique achievement badges'],
+  },
+  {
+    image: require('../assets/images/onboarding/slide5.png'),
+    accent: '#FFD700',
+    title: 'Build Your Dream Bike',
+    body: 'Every ride earns XP. Spend it in the Garage to upgrade your bike — faster parts mean more XP per ride.',
+    bullets: ['Upgrade frame, wheels, handlebars & drivetrain', 'Higher tiers unlock bigger XP multipliers', 'Earn XP from rides, achievements & challenges'],
   },
 ];
 
@@ -149,9 +157,14 @@ function SlideView({ slide }: { slide: Slide }) {
   return (
     <View style={styles.slide}>
       <View style={[styles.iconCircle, { borderColor: slide.accent + '60', backgroundColor: slide.accent + '18' }]}>
-        <Text style={styles.slideIcon}>{slide.icon}</Text>
+        <Image source={slide.image} style={styles.slideImage} resizeMode="contain" />
       </View>
-      <Text style={[styles.slideTitle, { color: slide.accent }]}>{slide.title}</Text>
+      <Text style={[styles.slideTitle, {
+        color: slide.accent,
+        textShadowColor: slide.accent,
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 12,
+      }]}>{slide.title}</Text>
       <Text style={styles.slideBody}>{slide.body}</Text>
       {slide.bullets && (
         <View style={styles.bullets}>
@@ -203,8 +216,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: SPACING.xl,
   },
-  slideIcon: {
-    fontSize: 56,
+  slideImage: {
+    width: 96,
+    height: 96,
   },
   slideTitle: {
     fontSize: FONT.size.xxl,

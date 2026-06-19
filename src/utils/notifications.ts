@@ -22,8 +22,8 @@ export async function scheduleDaily(settings: NotificationSettings): Promise<voi
     content: { title: pick.title, body: pick.body, sound: true },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour: settings.dailyReminderHour,
-      minute: settings.dailyReminderMinute,
+      hour: Math.floor(settings.dailyReminderHour ?? 8),
+      minute: Math.floor(settings.dailyReminderMinute ?? 0),
     } as Notifications.DailyTriggerInput,
   });
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,9 @@ import {
   StyleSheet,
   Animated,
   ScrollView,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ride } from '../types';
 import { formatDuration, formatDate, formatTime } from '../utils/format';
@@ -15,7 +18,9 @@ import { COLORS, SPACING, FONT, RADIUS } from '../constants/theme';
 interface Props {
   ride: Ride | null;
   unit: 'km' | 'miles';
+  sport?: 'cycling' | 'running';
   onDismiss: () => void;
+  onUpdateRide?: (id: string, patch: Partial<Ride>) => void;
 }
 
 interface StatRowProps {
@@ -37,12 +42,25 @@ function StatRow({ icon, label, value, accent }: StatRowProps) {
   );
 }
 
-export function RideDetailModal({ ride, unit, onDismiss }: Props) {
+const MOOD_OPTS = [
+  { v: 1 as const, emoji: '😴' },
+  { v: 2 as const, emoji: '😕' },
+  { v: 3 as const, emoji: '😊' },
+  { v: 4 as const, emoji: '😄' },
+  { v: 5 as const, emoji: '🔥' },
+] as const;
+
+export function RideDetailModal({ ride, unit, sport = 'cycling', onDismiss, onUpdateRide }: Props) {
   const slideAnim  = useRef(new Animated.Value(600)).current;
   const bgOpacity  = useRef(new Animated.Value(0)).current;
+  const [editingDistance, setEditingDistance] = useState(false);
+  const [distanceInput, setDistanceInput] = useState('');
+  const [editingMood, setEditingMood] = useState(false);
 
   useEffect(() => {
     if (!ride) return;
+    setEditingDistance(false);
+    setEditingMood(false);
     slideAnim.setValue(600);
     bgOpacity.setValue(0);
     Animated.parallel([
@@ -65,11 +83,33 @@ export function RideDetailModal({ ride, unit, onDismiss }: Props) {
 
   if (!ride) return null;
 
+  const distanceKm = ride.distance ?? 0;
   const distanceText = ride.distance
     ? unit === 'miles'
-      ? `${(ride.distance * 0.621371).toFixed(2)} mi`
-      : `${ride.distance.toFixed(2)} km`
+      ? `${ride.isEstimatedDistance ? '~' : ''}${(distanceKm * 0.621371).toFixed(2)} mi`
+      : `${ride.isEstimatedDistance ? '~' : ''}${distanceKm.toFixed(2)} km`
     : null;
+
+  function openDistanceEdit() {
+    // Pre-fill in the user's display unit
+    const displayVal = unit === 'miles'
+      ? (distanceKm * 0.621371).toFixed(2)
+      : distanceKm.toFixed(2);
+    setDistanceInput(displayVal);
+    setEditingDistance(true);
+  }
+
+  function saveDistance() {
+    const parsed = parseFloat(distanceInput);
+    if (!isNaN(parsed) && parsed >= 0 && onUpdateRide && ride) {
+      const newKm = unit === 'miles' ? parsed / 0.621371 : parsed;
+      onUpdateRide(ride.id, {
+        distance: parseFloat(newKm.toFixed(2)),
+        isEstimatedDistance: false,
+      });
+    }
+    setEditingDistance(false);
+  }
 
   return (
     <Modal
@@ -79,6 +119,10 @@ export function RideDetailModal({ ride, unit, onDismiss }: Props) {
       statusBarTranslucent
       onRequestClose={dismiss}
     >
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
       <Animated.View style={[styles.overlay, { opacity: bgOpacity }]}>
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={dismiss} />
 
@@ -91,10 +135,10 @@ export function RideDetailModal({ ride, unit, onDismiss }: Props) {
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.iconWrap}>
-              <Text style={styles.headerIcon}>🚴</Text>
+              <Text style={styles.headerIcon}>{sport === 'running' ? '🏃' : '🚴'}</Text>
             </View>
             <View style={styles.headerText}>
-              <Text style={styles.rideTitle}>{formatDuration(ride.duration)} Ride</Text>
+              <Text style={styles.rideTitle}>{formatDuration(ride.duration)} {sport === 'running' ? 'Run' : 'Ride'}</Text>
               <Text style={styles.rideDate}>
                 {formatDate(ride.date)} · {formatTime(ride.date)}
               </Text>
@@ -116,13 +160,44 @@ export function RideDetailModal({ ride, unit, onDismiss }: Props) {
                 value={formatDuration(ride.duration)}
                 accent={COLORS.blue}
               />
-              {distanceText && (
-                <StatRow
-                  icon="🗺️"
-                  label="Distance"
-                  value={distanceText}
-                  accent={COLORS.streak}
-                />
+              {(distanceText || ride.isEstimatedDistance) && (
+                editingDistance ? (
+                  <View style={styles.editDistanceRow}>
+                    <Text style={styles.statIcon}>🗺️</Text>
+                    <TextInput
+                      style={styles.distanceInput}
+                      value={distanceInput}
+                      onChangeText={setDistanceInput}
+                      keyboardType="decimal-pad"
+                      autoFocus
+                      selectTextOnFocus
+                    />
+                    <Text style={styles.distanceUnit}>{unit}</Text>
+                    <TouchableOpacity style={styles.distanceSaveBtn} onPress={saveDistance}>
+                      <Text style={styles.distanceSaveBtnText}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.statRow}>
+                    <View style={styles.statLeft}>
+                      <Text style={styles.statIcon}>🗺️</Text>
+                      <Text style={styles.statLabel}>Distance</Text>
+                      {ride.isEstimatedDistance && (
+                        <View style={styles.estBadge}>
+                          <Text style={styles.estBadgeText}>estimated</Text>
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.distanceRight}>
+                      <Text style={[styles.statValue, { color: COLORS.streak }]}>{distanceText}</Text>
+                      {onUpdateRide && (
+                        <TouchableOpacity onPress={openDistanceEdit} hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}>
+                          <Text style={styles.editIcon}>✏️</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                )
               )}
               {ride.calories != null && (
                 <StatRow
@@ -150,10 +225,58 @@ export function RideDetailModal({ ride, unit, onDismiss }: Props) {
               )}
               {ride.instructor && (
                 <StatRow
-                  icon="🎤"
-                  label="Instructor"
+                  icon={sport === 'running' ? '📱' : '🎤'}
+                  label={sport === 'running' ? 'Source' : 'Instructor'}
                   value={ride.instructor}
                 />
+              )}
+
+              {/* Mood — always show when editable; show when set if read-only */}
+              {(ride.mood != null || onUpdateRide) && (
+                editingMood ? (
+                  <View style={styles.moodEditRow}>
+                    <Text style={styles.statIcon}>💭</Text>
+                    <View style={styles.moodEditOptions}>
+                      {MOOD_OPTS.map((opt) => (
+                        <TouchableOpacity
+                          key={opt.v}
+                          style={[styles.moodOptionBtn, ride.mood === opt.v && styles.moodOptionSelected]}
+                          onPress={() => {
+                            onUpdateRide?.(ride.id, { mood: ride.mood === opt.v ? undefined : opt.v });
+                            setEditingMood(false);
+                          }}
+                        >
+                          <Text style={styles.moodOptionEmoji}>{opt.emoji}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <TouchableOpacity onPress={() => setEditingMood(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}>
+                      <Text style={styles.editIcon}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.statRow}>
+                    <View style={styles.statLeft}>
+                      <Text style={styles.statIcon}>💭</Text>
+                      <Text style={styles.statLabel}>Mood</Text>
+                    </View>
+                    <View style={styles.moodDisplayRight}>
+                      <Text style={styles.moodDisplayEmoji}>
+                        {ride.mood != null
+                          ? MOOD_OPTS.find((o) => o.v === ride.mood)?.emoji ?? '—'
+                          : '—'}
+                      </Text>
+                      {onUpdateRide && (
+                        <TouchableOpacity
+                          onPress={() => setEditingMood(true)}
+                          hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
+                        >
+                          <Text style={styles.editIcon}>✏️</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                )
               )}
             </View>
 
@@ -166,6 +289,7 @@ export function RideDetailModal({ ride, unit, onDismiss }: Props) {
           </ScrollView>
         </Animated.View>
       </Animated.View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -260,6 +384,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
+    flex: 1,
   },
   statIcon: { fontSize: 16, width: 22, textAlign: 'center' },
   statLabel: {
@@ -271,6 +396,100 @@ const styles = StyleSheet.create({
     fontWeight: FONT.weight.bold,
     color: COLORS.textPrimary,
   },
+  distanceRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  editIcon: { fontSize: 14 },
+  estBadge: {
+    backgroundColor: COLORS.primaryDim,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '50',
+  },
+  estBadgeText: {
+    fontSize: 9,
+    fontWeight: FONT.weight.semibold,
+    color: COLORS.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  editDistanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    gap: SPACING.sm,
+  },
+  distanceInput: {
+    flex: 1,
+    fontSize: FONT.size.sm,
+    fontWeight: FONT.weight.bold,
+    color: COLORS.textPrimary,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.primary,
+    paddingBottom: 2,
+    textAlign: 'right',
+  },
+  distanceUnit: {
+    fontSize: FONT.size.sm,
+    color: COLORS.textSecondary,
+  },
+  distanceSaveBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+  },
+  distanceSaveBtnText: {
+    fontSize: FONT.size.xs,
+    fontWeight: FONT.weight.bold,
+    color: COLORS.black,
+  },
+  moodEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    gap: SPACING.sm,
+  },
+  moodEditOptions: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: SPACING.xs,
+  },
+  moodOptionBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  moodOptionSelected: {
+    backgroundColor: COLORS.primaryDim,
+    borderColor: COLORS.primary,
+  },
+  moodOptionEmoji: {
+    fontSize: 18,
+  },
+  moodDisplayRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  moodDisplayEmoji: {
+    fontSize: 20,
+  },
+
   notesCard: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg,

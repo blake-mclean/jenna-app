@@ -7,12 +7,27 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A0F"
+    },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.jenna.cycletracker"
+      "bundleIdentifier": "com.blakemclean.jenna",
+      "buildNumber": "1",
+      "deploymentTarget": "15.1",
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.access": []
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.jenna.cycletracker",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#0A0A0F",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -27,16 +42,32 @@
     },
     "plugins": [
       "expo-router",
+      "expo-dev-client",
       [
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
           "color": "#00D4AA"
         }
-      ]
+      ],
+      [
+        "react-native-health",
+        {
+          "NSHealthShareUsageDescription": "JENNA reads your cycling workouts from Apple Health to automatically log your rides.",
+          "NSHealthUpdateUsageDescription": "JENNA does not write any data to Apple Health."
+        }
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "0aaf1600-85df-4ffa-9815-253a1b7f3632"
+      }
+    },
+    "owner": "jbmclean24"
   }
 }

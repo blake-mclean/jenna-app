@@ -1,10 +1,10 @@
-import { Ride, ChallengeState } from '../types';
+import { Ride, ChallengeState, ChallengeDef } from '../types';
 import { CHALLENGE_DEFS } from '../constants/challenges';
 import { calcCurrentStreak, ridesThisWeek } from './streaks';
 import { startOfDay, differenceInCalendarDays, parseISO } from 'date-fns';
 
-function progressForChallenge(id: string, rides: Ride[], enrolledDate?: string): number {
-  const def = CHALLENGE_DEFS.find((c) => c.id === id);
+function progressForChallenge(id: string, rides: Ride[], enrolledDate?: string, defs: ChallengeDef[] = CHALLENGE_DEFS): number {
+  const def = defs.find((c) => c.id === id);
   if (!def) return 0;
 
   // Only count rides logged after the user joined this challenge
@@ -58,11 +58,12 @@ function progressForChallenge(id: string, rides: Ride[], enrolledDate?: string):
 export function evaluateChallenges(
   rides: Ride[],
   existing: ChallengeState[],
+  defs: ChallengeDef[] = CHALLENGE_DEFS,
 ): ChallengeState[] {
   return existing.map((state) => {
     if (!state.enrolled || state.completed) return state;
-    const progress = progressForChallenge(state.id, rides, state.enrolledDate);
-    const def = CHALLENGE_DEFS.find((c) => c.id === state.id);
+    const progress = progressForChallenge(state.id, rides, state.enrolledDate, defs);
+    const def = defs.find((c) => c.id === state.id);
     const completed = def ? progress >= def.target : false;
     return {
       ...state,

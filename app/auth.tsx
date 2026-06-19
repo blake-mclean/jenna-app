@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,12 @@ import { COLORS, SPACING, FONT, RADIUS, SHADOW } from '@/constants/theme';
 type Mode = 'signin' | 'signup';
 
 export default function AuthScreen() {
-  const { signIn, signUp } = useApp();
+  const { signIn, signUp, session } = useApp();
+
+  // Navigate away as soon as a session exists
+  useEffect(() => {
+    if (session) router.replace('/(tabs)');
+  }, [session]);
 
   const [mode, setMode]               = useState<Mode>('signin');
   const [email, setEmail]             = useState('');
@@ -28,6 +33,7 @@ export default function AuthScreen() {
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
   const [checkEmail, setCheckEmail]   = useState(false);
+  const passwordRef = useRef<TextInput>(null);
 
   function switchMode(m: Mode) {
     setMode(m);
@@ -114,7 +120,7 @@ export default function AuthScreen() {
               <Text style={styles.logoIcon}>🚴</Text>
             </LinearGradient>
             <Text style={styles.appName}>JENNA</Text>
-            <Text style={styles.tagline}>Your personal cycling companion</Text>
+            <Text style={styles.tagline}>Your personal fitness companion</Text>
           </View>
 
           {/* Mode toggle */}
@@ -144,8 +150,11 @@ export default function AuthScreen() {
                 placeholderTextColor={COLORS.textTertiary}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoCorrect={false}
                 autoComplete="email"
+                autoFocus
                 returnKeyType="next"
+                onSubmitEditing={() => passwordRef.current?.focus()}
               />
             </View>
 
@@ -153,6 +162,7 @@ export default function AuthScreen() {
               <Text style={styles.fieldLabel}>Password</Text>
               <View style={styles.passwordRow}>
                 <TextInput
+                  ref={passwordRef}
                   style={[styles.input, styles.passwordInput]}
                   value={password}
                   onChangeText={setPassword}

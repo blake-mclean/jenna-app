@@ -32,7 +32,11 @@ yarn-error.*
 
 # local env files
 .env
+.env.*
 .env*.local
+
+# Supabase CLI state (contains project ref and org ID, not secrets but not needed in git)
+supabase/.temp/
 
 # typescript
 *.tsbuildinfo

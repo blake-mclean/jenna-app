@@ -19,6 +19,13 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="log-ride-manual"
+          options={{
+            presentation: 'modal',
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
           name="settings"
           options={{ presentation: 'card', headerShown: false }}
         />

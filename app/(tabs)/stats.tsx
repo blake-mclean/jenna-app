@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,9 @@ import { calcCurrentStreak, calcLongestStreak } from '@/utils/streaks';
 import { formatDuration } from '@/utils/format';
 import { getPersonalRecords } from '@/utils/challenges';
 import { COLORS, SPACING, FONT, RADIUS } from '@/constants/theme';
+import { InsightCard } from '@/components/InsightCard';
+import { Icon } from '@/components/Icon';
+import { generateReflection } from '@/utils/aiCoaching';
 import { parseISO, format, subDays, eachDayOfInterval } from 'date-fns';
 
 type ChartMode = 'rides' | 'duration' | 'distance';
@@ -27,11 +30,14 @@ function todayStr() {
 }
 
 export default function StatsScreen() {
-  const { data, deleteRide } = useApp();
-  const { rides, profile } = data;
+  const { data, sportData, session, deleteRide, updateRide, setAiInsight } = useApp();
+  const { profile } = data;
+  const { rides } = sportData;
   const [chartMode, setChartMode] = useState<ChartMode>('rides');
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
   const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [reflectionPeriod, setReflectionPeriod] = useState<'weekly' | 'monthly'>('weekly');
+  const [reflectionLoading, setReflectionLoading] = useState(false);
 
   // Reset to today whenever this tab comes into focus
   useFocusEffect(
@@ -42,43 +48,123 @@ export default function StatsScreen() {
 
   const streak = calcCurrentStreak(rides);
   const longestStreak = calcLongestStreak(rides);
-  const totalMinutes = rides.reduce((s, r) => s + r.duration, 0);
-  const totalKm = rides.reduce((s, r) => s + (r.distance ?? 0), 0);
-  const totalCal = rides.reduce((s, r) => s + (r.calories ?? 0), 0);
-  const prs = getPersonalRecords(rides);
+
+  const activeReflection = reflectionPeriod === 'weekly'
+    ? sportData.lastWeeklyReflection
+    : sportData.lastMonthlyReflection;
+
+  const reflectionKind = reflectionPeriod === 'weekly' ? 'weeklyReflection' : 'monthlyReflection';
+
+  function isWithin24h(insight: { createdAt: string } | undefined) {
+    if (!insight) return false;
+    return Date.now() - new Date(insight.createdAt).getTime() < 24 * 60 * 60 * 1000;
+  }
+
+  const canRegenerate = !isWithin24h(activeReflection);
+
+  async function handleGenerateReflection() {
+    if (!session || reflectionLoading || !canRegenerate) return;
+    setReflectionLoading(true);
+    try {
+      const content = await generateReflection({
+        rides,
+        currentStreak: streak,
+        longestStreak,
+        weeklyGoal: profile.weeklyRideGoal,
+        sport: profile.activeSport ?? 'cycling',
+        distanceUnit: profile.distanceUnit,
+        period: reflectionPeriod,
+      });
+      setAiInsight(reflectionKind, { content, createdAt: new Date().toISOString() });
+    } catch (_) {
+      // silent fail
+    } finally {
+      setReflectionLoading(false);
+    }
+  }
+  const { totalMinutes, totalKm, totalCal } = useMemo(() => {
+    let totalMinutes = 0, totalKm = 0, totalCal = 0;
+    for (const r of rides) {
+      totalMinutes += r.duration;
+      totalKm += r.distance ?? 0;
+      totalCal += r.calories ?? 0;
+    }
+    return { totalMinutes, totalKm, totalCal };
+  }, [rides]);
+  const prs = useMemo(() => getPersonalRecords(rides), [rides]);
+
+  const moodStats = useMemo(() => {
+    const withMood = rides.filter((r) => r.mood != null);
+    if (withMood.length === 0) return null;
+    const counts = [1, 2, 3, 4, 5].map((m) => withMood.filter((r) => r.mood === m).length);
+    const high = withMood.filter((r) => r.mood! >= 4);
+    const low = withMood.filter((r) => r.mood! <= 3);
+    if (withMood.length >= 10 && high.length >= 2 && low.length >= 2) {
+      const avgHigh = high.reduce((s, r) => s + r.duration, 0) / high.length;
+      const avgLow = low.reduce((s, r) => s + r.duration, 0) / low.length;
+      const minAvg = Math.min(avgHigh, avgLow);
+      const pct = minAvg > 0 ? Math.round(Math.abs(avgHigh - avgLow) / minAvg * 100) : 0;
+      return { total: withMood.length, counts, pct, higherOnGood: avgHigh > avgLow };
+    }
+    return { total: withMood.length, counts, pct: null };
+  }, [rides]);
 
   // Rides for the selected calendar day
-  const dayRides = rides.filter(
-    (r) => format(parseISO(r.date), 'yyyy-MM-dd') === selectedDate
+  const dayRides = useMemo(
+    () => rides.filter((r) => format(parseISO(r.date), 'yyyy-MM-dd') === selectedDate),
+    [rides, selectedDate],
   );
 
   // Calendar: mark days with rides; highlight the selected day
-  const markedDates = rides.reduce<Record<string, any>>((acc, r) => {
-    const key = format(parseISO(r.date), 'yyyy-MM-dd');
-    acc[key] = { marked: true, dotColor: COLORS.primary };
-    return acc;
-  }, {});
-  markedDates[selectedDate] = {
-    ...(markedDates[selectedDate] ?? {}),
-    selected: true,
-    selectedColor: COLORS.primary,
-    selectedTextColor: COLORS.black,
-    // keep dot visible if there are rides on the selected day
-    marked: dayRides.length > 0,
-    dotColor: COLORS.black,
-  };
+  const markedDates = useMemo(() => {
+    const base = rides.reduce<Record<string, any>>((acc, r) => {
+      const key = format(parseISO(r.date), 'yyyy-MM-dd');
+      acc[key] = { marked: true, dotColor: COLORS.primary };
+      return acc;
+    }, {});
+    base[selectedDate] = {
+      ...(base[selectedDate] ?? {}),
+      selected: true,
+      selectedColor: COLORS.primary,
+      selectedTextColor: COLORS.black,
+      marked: dayRides.length > 0,
+      dotColor: COLORS.black,
+    };
+    return base;
+  }, [rides, selectedDate, dayRides.length]);
+
+  const distanceUnit = profile.distanceUnit;
 
   // Last 7 days chart data
-  const last7 = eachDayOfInterval({ start: subDays(new Date(), 6), end: new Date() });
-  const chartData = last7.map((day) => {
-    const dayStr = format(day, 'yyyy-MM-dd');
-    const dayRides = rides.filter((r) => format(parseISO(r.date), 'yyyy-MM-dd') === dayStr);
-    let value = 0;
-    if (chartMode === 'rides') value = dayRides.length;
-    else if (chartMode === 'duration') value = dayRides.reduce((s, r) => s + r.duration, 0);
-    else value = dayRides.reduce((s, r) => s + (r.distance ?? 0), 0);
-    return { label: format(day, 'EEE')[0], value };
-  });
+  const chartData = useMemo(() => {
+    const last7 = eachDayOfInterval({ start: subDays(new Date(), 6), end: new Date() });
+    return last7.map((day) => {
+      const dayStr = format(day, 'yyyy-MM-dd');
+      const dayRides = rides.filter((r) => format(parseISO(r.date), 'yyyy-MM-dd') === dayStr);
+      let value = 0;
+      if (chartMode === 'rides') value = dayRides.length;
+      else if (chartMode === 'duration') value = dayRides.reduce((s, r) => s + r.duration, 0);
+      else {
+        const km = dayRides.reduce((s, r) => s + (r.distance ?? 0), 0);
+        value = distanceUnit === 'miles' ? km * 0.621371 : km;
+      }
+      return { label: format(day, 'EEE')[0], value };
+    });
+  }, [rides, chartMode, distanceUnit]);
+
+  if (rides.length === 0) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.emptyRoot}>
+          <Icon name={profile.activeSport === 'running' ? 'runner' : 'bicycle'} size={64} color={COLORS.textTertiary} />
+          <Text style={styles.emptyTitle}>No {profile.activeSport === 'running' ? 'runs' : 'rides'} yet</Text>
+          <Text style={styles.emptyBody}>
+            Your stats, streaks, and personal records will appear here once you start logging.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -101,7 +187,7 @@ export default function StatsScreen() {
           </View>
           <View style={styles.streakCard}>
             <Text style={styles.streakVal}>{rides.length}</Text>
-            <Text style={styles.streakLabel}>Total rides</Text>
+            <Text style={styles.streakLabel}>Total {profile.activeSport === 'running' ? 'runs' : 'rides'}</Text>
           </View>
           <View style={styles.streakCard}>
             <Text style={styles.streakVal}>{formatDuration(totalMinutes)}</Text>
@@ -117,7 +203,7 @@ export default function StatsScreen() {
               <View style={styles.prCard}>
                 <Text style={styles.prIcon}>⏱️</Text>
                 <Text style={styles.prVal}>{formatDuration(prs.longestRide)}</Text>
-                <Text style={styles.prLabel}>Longest ride</Text>
+                <Text style={styles.prLabel}>Longest {profile.activeSport === 'running' ? 'run' : 'ride'}</Text>
               </View>
               {prs.longestDistance > 0 && (
                 <View style={styles.prCard}>
@@ -141,6 +227,36 @@ export default function StatsScreen() {
           </>
         )}
 
+        {/* Mood Insights */}
+        {moodStats && (
+          <>
+            <Text style={styles.sectionTitle}>Mood Insights</Text>
+            <View style={styles.moodCard}>
+              {moodStats.pct !== null ? (
+                <Text style={styles.moodCorrelation}>
+                  You go{' '}
+                  <Text style={styles.moodCorrelationHighlight}>
+                    {moodStats.pct}% {moodStats.higherOnGood ? 'longer' : 'shorter'}
+                  </Text>
+                  {' '}on high-mood days 😄🔥
+                </Text>
+              ) : (
+                <Text style={styles.moodProgress}>
+                  {10 - moodStats.total} more rated {10 - moodStats.total === 1 ? 'ride' : 'rides'} to unlock insights
+                </Text>
+              )}
+              <View style={styles.moodDistRow}>
+                {(['😴', '😕', '😊', '😄', '🔥'] as const).map((emoji, i) => (
+                  <View key={i} style={styles.moodDistItem}>
+                    <Text style={styles.moodDistEmoji}>{emoji}</Text>
+                    <Text style={styles.moodDistCount}>{moodStats.counts[i]}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </>
+        )}
+
         {/* Chart */}
         <Text style={styles.sectionTitle}>Last 7 Days</Text>
         <View style={styles.chartModeRow}>
@@ -151,7 +267,7 @@ export default function StatsScreen() {
               onPress={() => setChartMode(m)}
             >
               <Text style={[styles.modeBtnText, chartMode === m && styles.modeBtnTextActive]}>
-                {m === 'rides' ? 'Rides' : m === 'duration' ? 'Minutes' : 'km'}
+                {m === 'rides' ? (profile.activeSport === 'running' ? 'Runs' : 'Rides') : m === 'duration' ? 'Minutes' : distanceUnit === 'miles' ? 'mi' : 'km'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -160,12 +276,12 @@ export default function StatsScreen() {
           <BarChart
             data={chartData}
             color={COLORS.primary}
-            unit={chartMode === 'rides' ? '' : chartMode === 'duration' ? 'm' : 'k'}
+            unit={chartMode === 'rides' ? '' : chartMode === 'duration' ? 'm' : distanceUnit === 'miles' ? 'mi' : 'k'}
           />
         </View>
 
         {/* Calendar */}
-        <Text style={styles.sectionTitle}>Ride Calendar</Text>
+        <Text style={styles.sectionTitle}>{profile.activeSport === 'running' ? 'Run' : 'Ride'} Calendar</Text>
         <View style={styles.calendarWrap}>
           <Calendar
             markedDates={markedDates}
@@ -192,7 +308,9 @@ export default function StatsScreen() {
         {/* Ride history — filtered to selected calendar day */}
         <View style={styles.historyHeader}>
           <Text style={styles.sectionTitle}>
-            {selectedDate === todayStr() ? "Today's Rides" : `Rides on ${format(parseISO(selectedDate), 'MMM d')}`}
+            {selectedDate === todayStr()
+              ? `Today's ${profile.activeSport === 'running' ? 'Runs' : 'Rides'}`
+              : `${profile.activeSport === 'running' ? 'Runs' : 'Rides'} on ${format(parseISO(selectedDate), 'MMM d')}`}
           </Text>
           {selectedDate !== todayStr() && (
             <TouchableOpacity onPress={() => setSelectedDate(todayStr())}>
@@ -204,8 +322,8 @@ export default function StatsScreen() {
           <View style={styles.empty}>
             <Text style={styles.emptyText}>
               {selectedDate === todayStr()
-                ? 'No rides today. Get on the bike!'
-                : 'No rides on this day.'}
+                ? profile.activeSport === 'running' ? 'No runs today. Hit the pavement!' : 'No rides today. Get on the bike!'
+                : `No ${profile.activeSport === 'running' ? 'runs' : 'rides'} on this day.`}
             </Text>
           </View>
         )}
@@ -214,16 +332,62 @@ export default function StatsScreen() {
             key={ride.id}
             ride={ride}
             unit={profile.distanceUnit}
+            sport={(profile.activeSport ?? 'cycling') as 'cycling' | 'running'}
             onDelete={deleteRide}
             onPress={setSelectedRide}
           />
         ))}
+
+        {/* AI Reflection */}
+        {session && (
+          <>
+            <Text style={styles.sectionTitle}>Reflection</Text>
+
+            {/* Period toggle */}
+            <View style={styles.periodRow}>
+              {(['weekly', 'monthly'] as const).map((p) => (
+                <TouchableOpacity
+                  key={p}
+                  style={[styles.periodBtn, reflectionPeriod === p && styles.periodBtnActive]}
+                  onPress={() => setReflectionPeriod(p)}
+                >
+                  <Text style={[styles.periodText, reflectionPeriod === p && styles.periodTextActive]}>
+                    {p === 'weekly' ? 'Last 7 days' : 'Last 30 days'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {activeReflection ? (
+              <InsightCard insight={activeReflection.content} />
+            ) : null}
+
+            <TouchableOpacity
+              style={[
+                styles.generateBtn,
+                (reflectionLoading || !canRegenerate) && styles.generateBtnLoading,
+              ]}
+              onPress={handleGenerateReflection}
+              disabled={reflectionLoading || !canRegenerate}
+            >
+              <Text style={styles.generateBtnText}>
+                {reflectionLoading
+                  ? 'Generating...'
+                  : activeReflection
+                    ? canRegenerate ? 'Regenerate' : 'Come back tomorrow'
+                    : 'Generate Reflection'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
 
       <RideDetailModal
         ride={selectedRide}
         unit={profile.distanceUnit}
+        sport={(profile.activeSport ?? 'cycling') as 'cycling' | 'running'}
         onDismiss={() => setSelectedRide(null)}
+        onUpdateRide={updateRide}
       />
     </SafeAreaView>
   );
@@ -307,6 +471,52 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  moodCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: SPACING.sm,
+  },
+  moodCorrelation: {
+    fontSize: FONT.size.sm,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+  },
+  moodCorrelationHighlight: {
+    color: COLORS.primary,
+    fontWeight: FONT.weight.bold,
+  },
+  moodProgress: {
+    fontSize: FONT.size.sm,
+    color: COLORS.textSecondary,
+  },
+  moodDistRow: {
+    flexDirection: 'row',
+    gap: SPACING.xs,
+    marginTop: SPACING.xs,
+  },
+  moodDistItem: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceElevated,
+    borderRadius: RADIUS.sm,
+    paddingVertical: SPACING.xs + 2,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  moodDistEmoji: {
+    fontSize: 18,
+    marginBottom: 2,
+  },
+  moodDistCount: {
+    fontSize: FONT.size.xs,
+    fontWeight: FONT.weight.bold,
+    color: COLORS.textSecondary,
+  },
+
   chartModeRow: {
     flexDirection: 'row',
     gap: SPACING.sm,
@@ -371,5 +581,69 @@ const styles = StyleSheet.create({
   emptyText: {
     color: COLORS.textSecondary,
     fontSize: FONT.size.sm,
+  },
+
+  periodRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  periodBtn: {
+    flex: 1,
+    paddingVertical: SPACING.xs + 2,
+    borderRadius: RADIUS.full,
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  periodBtnActive: {
+    backgroundColor: COLORS.primaryDim,
+    borderColor: COLORS.primary,
+  },
+  periodText: {
+    fontSize: FONT.size.xs,
+    fontWeight: FONT.weight.medium,
+    color: COLORS.textSecondary,
+  },
+  periodTextActive: {
+    color: COLORS.primary,
+    fontWeight: FONT.weight.bold,
+  },
+
+  generateBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.sm + 2,
+    alignItems: 'center',
+    marginBottom: SPACING.xl,
+  },
+  generateBtnLoading: {
+    opacity: 0.6,
+  },
+  generateBtnText: {
+    fontSize: FONT.size.sm,
+    fontWeight: FONT.weight.bold,
+    color: COLORS.white,
+  },
+
+  emptyRoot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.xl,
+    gap: SPACING.md,
+  },
+  emptyTitle: {
+    fontSize: FONT.size.xl,
+    fontWeight: FONT.weight.bold,
+    color: COLORS.textPrimary,
+  },
+  emptyBody: {
+    fontSize: FONT.size.sm,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    maxWidth: 280,
   },
 });
