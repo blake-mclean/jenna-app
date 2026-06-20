@@ -44,9 +44,9 @@ export function RideCard({ ride, unit, sport = 'cycling', onDelete, onPress }: P
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, { dx, dy }) => {
         if (!delRef.current) return false;
-        if (Math.abs(dy) >= Math.abs(dx)) return false;
+        if (Math.abs(dy) >= Math.abs(dx) * 0.5) return false;
         if (!isOpen.current && dx > 0) return false;
-        return Math.abs(dx) > 5;
+        return Math.abs(dx) > 12;
       },
       onPanResponderMove: (_, { dx }) => {
         const base = isOpen.current ? -DELETE_WIDTH : 0;
