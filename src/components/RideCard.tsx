@@ -91,7 +91,10 @@ export function RideCard({ ride, unit, sport = 'cycling', onDelete, onPress }: P
       <Animated.View style={{ transform: [{ translateX: tx }] }} {...panResponder.panHandlers}>
         <TouchableOpacity
           style={styles.card}
-          onPress={() => { isOpen.current ? snapClose() : onPress?.(ride); }}
+          onPress={() => {
+            if (isOpen.current) snapClose();
+            onPress?.(ride);
+          }}
           activeOpacity={0.7}
         >
           <View style={styles.left}>
