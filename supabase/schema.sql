@@ -157,3 +157,15 @@ BEGIN
   RETURN TRUE;
 END;
 $$;
+
+-- ─── Account deletion ─────────────────────────────────────────────────────────
+-- Called via supabase.rpc('delete_user_account') from the client.
+-- SECURITY DEFINER lets it delete from auth.users (which cascades to all tables).
+
+CREATE OR REPLACE FUNCTION delete_user_account()
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+AS $$
+  DELETE FROM auth.users WHERE id = auth.uid();
+$$;

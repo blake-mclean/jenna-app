@@ -124,7 +124,7 @@ function formatTime(h24: number, min: number): string {
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function SettingsScreen() {
-  const { data, updateNotifications, switchSport, signOut, session } = useApp();
+  const { data, updateNotifications, switchSport, signOut, deleteAccount, session } = useApp();
   const { notifications } = data;
   const activeSport = data.profile.activeSport ?? 'cycling';
 
@@ -295,6 +295,38 @@ export default function SettingsScreen() {
         >
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.deleteAccountBtn}
+          onPress={() =>
+            Alert.alert(
+              'Delete Account',
+              'This will permanently delete your account and all your data — rides, achievements, progress, and badges. This cannot be undone.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete Account',
+                  style: 'destructive',
+                  onPress: () =>
+                    Alert.alert(
+                      'Are you absolutely sure?',
+                      'Your account will be deleted immediately and cannot be recovered.',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Delete Forever',
+                          style: 'destructive',
+                          onPress: () => deleteAccount(),
+                        },
+                      ]
+                    ),
+                },
+              ]
+            )
+          }
+        >
+          <Text style={styles.deleteAccountText}>Delete Account</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* Time picker modal */}
@@ -436,9 +468,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.record + '60',
-    marginBottom: SPACING.xxl,
+    marginBottom: SPACING.sm,
   },
   signOutText: { fontSize: FONT.size.md, fontWeight: FONT.weight.semibold, color: COLORS.record },
+
+  deleteAccountBtn: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FF3B3060',
+    marginBottom: SPACING.xxl,
+  },
+  deleteAccountText: { fontSize: FONT.size.md, fontWeight: FONT.weight.semibold, color: '#FF3B30' },
 
   // Modal
   modalOverlay: {

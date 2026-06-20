@@ -191,3 +191,12 @@ export async function resetUserDataRemote(userId: string, data: AppData): Promis
   await supabase.from('rides').delete().eq('user_id', userId);
   await pushToSupabase(userId, data);
 }
+
+// ─── Account deletion ─────────────────────────────────────────────────────────
+// Calls the delete_user_account() stored procedure which deletes the auth.users
+// row — cascading to profiles, rides, and user_data via ON DELETE CASCADE.
+
+export async function deleteAccountRemote(): Promise<void> {
+  const { error } = await supabase.rpc('delete_user_account');
+  if (error) throw error;
+}

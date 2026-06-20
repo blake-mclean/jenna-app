@@ -13,7 +13,7 @@ import { LEVEL_BADGE_DEFS } from '../constants/levelBadges';
 import { GARAGE_PARTS, EMPTY_GARAGE, getXpMultiplier } from '../constants/garage';
 import { xpForRide, xpForChallenge, xpForLevelUp, XP_PER_ACHIEVEMENT } from '../utils/xp';
 import { supabase } from '../lib/supabase';
-import { pushToSupabase, pullFromSupabase, deleteRideRemote, resetUserDataRemote } from '../utils/sync';
+import { pushToSupabase, pullFromSupabase, deleteRideRemote, resetUserDataRemote, deleteAccountRemote } from '../utils/sync';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -354,6 +354,7 @@ interface AppContextValue {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<{ emailConfirmationRequired: boolean }>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -560,6 +561,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // onAuthStateChange handles clearing data
   }, []);
 
+  const deleteAccount = useCallback(async () => {
+    await deleteAccountRemote();
+    await supabase.auth.signOut();
+    // onAuthStateChange SIGNED_OUT handler resets local data
+  }, []);
+
   return (
     <AppContext.Provider
       value={{
@@ -568,7 +575,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         enrollChallenge, unenrollChallenge, updateNotifications,
         equipBadge, markOnboardingSeen, resetData, setLastHealthSyncDate, switchSport,
         setAiInsight, clearAiInsight, purchaseUpgrade, equipUpgrade,
-        signIn, signUp, signOut,
+        signIn, signUp, signOut, deleteAccount,
       }}
     >
       {children}
